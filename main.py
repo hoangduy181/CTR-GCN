@@ -21,11 +21,32 @@ import torch
 import torch.backends.cudnn as cudnn
 import torch.nn as nn
 import torch.optim as optim
+
+# logging and visualization
 import yaml
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
-from torchlight import DictAction
+
+# Try to import DictAction from torchlight, fallback to local implementation
+try:
+    from torchlight import DictAction
+except ImportError:
+    class DictAction(argparse.Action):
+        """Action class for argparse to handle dictionary arguments."""
+        def __init__(self, option_strings, dest, nargs=None, **kwargs):
+            if nargs is not None:
+                raise ValueError("nargs not allowed")
+            super(DictAction, self).__init__(option_strings, dest, **kwargs)
+
+        def __call__(self, parser, namespace, values, option_string=None):
+            input_dict = eval(f'dict({values})')  # pylint: disable=W0123
+            output_dict = getattr(namespace, self.dest)
+            if output_dict is None:
+                output_dict = {}
+            for k in input_dict:
+                output_dict[k] = input_dict[k]
+            setattr(namespace, self.dest, output_dict)
 
 
 import resource
@@ -56,7 +77,6 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Unsupported value encountered.')
-
 
 def get_parser():
     # parameter priority: command line > config > default
@@ -555,13 +575,17 @@ class Processor():
             self.print_log('Done.\n')
 
 if __name__ == '__main__':
+    print("Starting CTR-GCN...")
     parser = get_parser()
-
+    print("Initialized Parser ✅")
     # load arg form config file
     p = parser.parse_args()
+    print("Parsed Arguments ✅")
     if p.config is not None:
+        print("Loading Config File ✅")
         with open(p.config, 'r') as f:
-            default_arg = yaml.load(f)
+            # default_arg = yaml.load(f)
+            default_arg = yaml.safe_load(f)
         key = vars(p).keys()
         for k in default_arg.keys():
             if k not in key:
