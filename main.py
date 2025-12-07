@@ -277,14 +277,16 @@ class Processor():
                 shuffle=True,
                 num_workers=self.arg.num_worker,
                 drop_last=True,
-                worker_init_fn=init_seed)
+                worker_init_fn=init_seed
+            )
         self.data_loader['test'] = torch.utils.data.DataLoader(
             dataset=Feeder(**self.arg.test_feeder_args),
             batch_size=self.arg.test_batch_size,
             shuffle=False,
             num_workers=self.arg.num_worker,
             drop_last=False,
-            worker_init_fn=init_seed)
+            worker_init_fn=init_seed
+            )
 
     def load_model(self):
         output_device = self.arg.device[0] if type(self.arg.device) is list else self.arg.device
@@ -579,7 +581,11 @@ if __name__ == '__main__':
     parser = get_parser()
     print("Initialized Parser ✅")
     # load arg form config file
-    p = parser.parse_args()
+    p = parser.parse_args() # parse arguments from command line
+    # print the arguments
+    print("Arguments:")
+    for arg in vars(p):
+        print(f"{arg}: {getattr(p, arg)}")
     print("Parsed Arguments ✅")
     if p.config is not None:
         print("Loading Config File ✅")
