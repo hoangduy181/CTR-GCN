@@ -535,7 +535,6 @@ class Processor():
                         epoch + 1 == self.arg.num_epoch)) and (epoch+1) > self.arg.save_epoch
 
                 self.train(epoch, save_model=save_model)
-
                 self.eval(epoch, save_score=self.arg.save_score, loader_name=['test'])
 
             # test the best model
@@ -555,7 +554,7 @@ class Processor():
 
             num_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
             self.print_log(f'Best accuracy: {self.best_acc}')
-            self.print_log(f'Epoch number: {self.best_acc_epoch}')
+            self.print_log(f'Epoch number (best accuracy epoch): {self.best_acc_epoch}')
             self.print_log(f'Model name: {self.arg.work_dir}')
             self.print_log(f'Model total number of params: {num_params}')
             self.print_log(f'Weight decay: {self.arg.weight_decay}')
@@ -590,7 +589,6 @@ if __name__ == '__main__':
     if p.config is not None:
         print("Loading Config File ✅")
         with open(p.config, 'r') as f:
-            # default_arg = yaml.load(f)
             default_arg = yaml.safe_load(f)
         key = vars(p).keys()
         for k in default_arg.keys():
