@@ -227,6 +227,7 @@ class Processor():
     """
 
     def __init__(self, arg):
+        print("=== Processor@__init__ ===")
         self.arg = arg
         self.save_arg()
         if arg.phase == 'train':
