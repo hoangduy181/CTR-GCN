@@ -41,8 +41,23 @@ def remove_nan_frames(ske_name, ske_joints, nan_logger):
 
     return ske_joints[valid_frames]
 
-def seq_translation(skes_joints):
-    for idx, ske_joints in enumerate(skes_joints):
+def seq_translation(skes_joints, batch_start=0, batch_end=None):
+    """
+    Translate sequences to origin (joint-2) for each skeleton.
+    
+    Args:
+        skes_joints: List of joint arrays to process
+        batch_start: Starting index for batch processing (default: 0)
+        batch_end: Ending index for batch processing (default: None = all)
+    
+    Returns:
+        Modified skes_joints list
+    """
+    if batch_end is None:
+        batch_end = len(skes_joints)
+    
+    for idx in range(batch_start, batch_end):
+        ske_joints = skes_joints[idx]
         num_frames = ske_joints.shape[0]
         num_bodies = 1 if ske_joints.shape[1] == 75 else 2
         if num_bodies == 2:
@@ -76,13 +91,31 @@ def seq_translation(skes_joints):
     return skes_joints
 
 
-def frame_translation(skes_joints, skes_name, frames_cnt):
+def frame_translation(skes_joints, skes_name, frames_cnt, batch_start=0, batch_end=None):
+    """
+    Translate frames to origin and normalize by spine distance.
+    
+    Args:
+        skes_joints: List of joint arrays to process
+        skes_name: List of skeleton names
+        frames_cnt: Array of frame counts (will be modified)
+        batch_start: Starting index for batch processing (default: 0)
+        batch_end: Ending index for batch processing (default: None = all)
+    
+    Returns:
+        Modified skes_joints list and frames_cnt array
+    """
     nan_logger = logging.getLogger('nan_skes')
     nan_logger.setLevel(logging.INFO)
     nan_logger.addHandler(logging.FileHandler("./nan_frames.log"))
-    nan_logger.info('{}\t{}\t{}'.format('Skeleton', 'Frame', 'Joints'))
+    if batch_start == 0:
+        nan_logger.info('{}\t{}\t{}'.format('Skeleton', 'Frame', 'Joints'))
 
-    for idx, ske_joints in enumerate(skes_joints):
+    if batch_end is None:
+        batch_end = len(skes_joints)
+
+    for idx in range(batch_start, batch_end):
+        ske_joints = skes_joints[idx]
         num_frames = ske_joints.shape[0]
         # Calculate the distance between spine base (joint-1) and spine (joint-21)
         j1 = ske_joints[:, 0:3]
@@ -154,23 +187,26 @@ def split_train_val(train_indices, method='sklearn', ratio=0.05):
 
 
 def split_dataset(skes_joints, label, performer, camera, evaluation, save_path):
-    train_indices, test_indices = get_indices(performer, camera, evaluation)
-    m = 'sklearn'  # 'sklearn' or 'numpy'
-    # Select validation set from training set
-    # train_indices, val_indices = split_train_val(train_indices, m)
+    try:
+        train_indices, test_indices = get_indices(performer, camera, evaluation)
+        m = 'sklearn'  # 'sklearn' or 'numpy'
+        # Select validation set from training set
+        # train_indices, val_indices = split_train_val(train_indices, m)
 
-    # Save labels and num_frames for each sequence of each data set
-    train_labels = label[train_indices]
-    test_labels = label[test_indices]
+        # Save labels and num_frames for each sequence of each data set
+        train_labels = label[train_indices]
+        test_labels = label[test_indices]
 
-    train_x = skes_joints[train_indices]
-    train_y = one_hot_vector(train_labels)
-    test_x = skes_joints[test_indices]
-    test_y = one_hot_vector(test_labels)
+        train_x = skes_joints[train_indices]
+        train_y = one_hot_vector(train_labels)
+        test_x = skes_joints[test_indices]
+        test_y = one_hot_vector(test_labels)
 
-    save_name = 'NTU60_%s.npz' % evaluation
-    np.savez(save_name, x_train=train_x, y_train=train_y, x_test=test_x, y_test=test_y)
-
+        save_name = 'NTU60_%s.npz' % evaluation
+        np.savez(save_name, x_train=train_x, y_train=train_y, x_test=test_x, y_test=test_y)
+    except Exception as e:
+        print(f"Error saving dataset: {e}")
+        raise
     # Save data into a .h5 file
     # h5file = h5py.File(osp.join(save_path, 'NTU_%s.h5' % (evaluation)), 'w')
     # Training set
@@ -188,6 +224,73 @@ def split_dataset(skes_joints, label, performer, camera, evaluation, save_path):
 
     # h5file.close()
 
+# def split_dataset(skes_joints, label, performer, camera, evaluation, save_path, batch_size=500):
+#     """
+#     Split dataset into train/test sets and save incrementally to avoid memory issues.
+    
+#     Args:
+#         skes_joints: Array of skeleton joints (num_skes, max_frames, 150)
+#         label: Array of labels
+#         performer: Array of performer IDs
+#         camera: Array of camera IDs
+#         evaluation: 'CS' or 'CV'
+#         save_path: Path to save output
+#         batch_size: Number of sequences to process at once (default: 500)
+#     """
+#     try:
+#         train_indices, test_indices = get_indices(performer, camera, evaluation)
+#         print(f"    Train samples: {len(train_indices)}, Test samples: {len(test_indices)}")
+        
+#         # Get labels (small arrays, safe to load all at once)
+#         train_labels = label[train_indices]
+#         test_labels = label[test_indices]
+#         train_y = one_hot_vector(train_labels)
+#         test_y = one_hot_vector(test_labels)
+
+#         save_name = 'NTU60_%s.npz' % evaluation
+        
+#         # Process train data in batches
+#         print(f"    Processing train data in batches of {batch_size}...")
+#         train_batches = []
+#         for batch_start in range(0, len(train_indices), batch_size):
+#             batch_end = min(batch_start + batch_size, len(train_indices))
+#             batch_indices = train_indices[batch_start:batch_end]
+#             batch_x = skes_joints[batch_indices]
+#             train_batches.append(batch_x)
+#             if (batch_start // batch_size + 1) % 10 == 0:
+#                 print(f"      Processed {batch_end}/{len(train_indices)} train samples")
+        
+#         # Concatenate train batches
+#         print(f"    Concatenating train batches...")
+#         train_x = np.concatenate(train_batches, axis=0)
+#         del train_batches
+        
+#         # Process test data in batches
+#         print(f"    Processing test data in batches of {batch_size}...")
+#         test_batches = []
+#         for batch_start in range(0, len(test_indices), batch_size):
+#             batch_end = min(batch_start + batch_size, len(test_indices))
+#             batch_indices = test_indices[batch_start:batch_end]
+#             batch_x = skes_joints[batch_indices]
+#             test_batches.append(batch_x)
+#             if (batch_start // batch_size + 1) % 10 == 0:
+#                 print(f"      Processed {batch_end}/{len(test_indices)} test samples")
+        
+#         # Concatenate test batches
+#         print(f"    Concatenating test batches...")
+#         test_x = np.concatenate(test_batches, axis=0)
+#         del test_batches
+        
+#         # Save with compression to reduce file size and memory usage
+#         print(f"    Saving to {save_name}...")
+#         np.savez_compressed(save_name, x_train=train_x, y_train=train_y, x_test=test_x, y_test=test_y)
+        
+#         # Clean up
+#         del train_x, test_x
+        
+#     except Exception as e:
+#         print(f"Error saving dataset: {e}")
+#         raise
 
 def get_indices(performer, camera, evaluation='CS'):
     test_indices = np.empty(0)
@@ -202,42 +305,80 @@ def get_indices(performer, camera, evaluation='CS'):
         # Get indices of test data
         for idx in test_ids:
             temp = np.where(performer == idx)[0]  # 0-based index
-            test_indices = np.hstack((test_indices, temp)).astype(np.int)
+            test_indices = np.hstack((test_indices, temp)).astype(int)
 
         # Get indices of training data
         for train_id in train_ids:
             temp = np.where(performer == train_id)[0]  # 0-based index
-            train_indices = np.hstack((train_indices, temp)).astype(np.int)
+            train_indices = np.hstack((train_indices, temp)).astype(int)
     else:  # Cross View (Camera IDs)
         train_ids = [2, 3]
         test_ids = 1
         # Get indices of test data
         temp = np.where(camera == test_ids)[0]  # 0-based index
-        test_indices = np.hstack((test_indices, temp)).astype(np.int)
+        test_indices = np.hstack((test_indices, temp)).astype(int)
 
         # Get indices of training data
         for train_id in train_ids:
             temp = np.where(camera == train_id)[0]  # 0-based index
-            train_indices = np.hstack((train_indices, temp)).astype(np.int)
+            train_indices = np.hstack((train_indices, temp)).astype(int)
 
     return train_indices, test_indices
 
 
 if __name__ == '__main__':
-    camera = np.loadtxt(camera_file, dtype=np.int)  # camera id: 1, 2, 3
-    performer = np.loadtxt(performer_file, dtype=np.int)  # subject id: 1~40
-    label = np.loadtxt(label_file, dtype=np.int) - 1  # action label: 0~59
-
-    frames_cnt = np.loadtxt(frames_file, dtype=np.int)  # frames_cnt
+    """
+    Main execution: Process skeleton joints in batches to reduce memory usage.
+    
+    This script:
+    1. Loads skeleton joints from pickle file
+    2. Processes sequences in batches (translation, alignment)
+    3. Splits dataset into train/test sets for different evaluations
+    """
+    # Configuration
+    batch_size = 2000  # Process sequences in batches to reduce memory usage
+    
+    # Load metadata files
+    camera = np.loadtxt(camera_file, dtype=int)  # camera id: 1, 2, 3
+    performer = np.loadtxt(performer_file, dtype=int)  # subject id: 1~40
+    label = np.loadtxt(label_file, dtype=int) - 1  # action label: 0~59
+    frames_cnt = np.loadtxt(frames_file, dtype=int)  # frames_cnt
     skes_name = np.loadtxt(skes_name_file, dtype=np.string_)
-
-    with open(raw_skes_joints_pkl, 'rb') as fr:
-        skes_joints = pickle.load(fr)  # a list
-
-    skes_joints = seq_translation(skes_joints)
-
+    
+    print("=== Loading skeleton joints from:", raw_skes_joints_pkl)
+    try:
+        with open(raw_skes_joints_pkl, 'rb') as fr:
+            skes_joints = pickle.load(fr)  # a list
+    except (pickle.UnpicklingError, EOFError, ImportError) as e:
+        print(f"Error loading pickle file: {e}")
+        raise
+    
+    num_skes = len(skes_joints)
+    print(f"Loaded {num_skes} skeleton sequences")
+    print(f"Processing in batches of {batch_size} sequences to reduce memory usage")
+    
+    # Process sequences in batches
+    total_batches = (num_skes + batch_size - 1) // batch_size
+    
+    # Step 1: Sequence translation (translate to origin)
+    print("\n=== Step 1: Sequence Translation ===")
+    for batch_start in range(0, num_skes, batch_size):
+        batch_end = min(batch_start + batch_size, num_skes)
+        batch_num = batch_start // batch_size + 1
+        print(f"  Processing batch {batch_num}/{total_batches}: sequences {batch_start} to {batch_end-1}")
+        skes_joints = seq_translation(skes_joints, batch_start=batch_start, batch_end=batch_end)
+    
+    # Step 2: Align frames to same length
+    print("\n=== Step 2: Frame Alignment ===")
     skes_joints = align_frames(skes_joints, frames_cnt)  # aligned to the same frame length
-
+    print(f"Aligned all sequences to max frame length: {frames_cnt.max()}")
+    
+    # Step 3: Split dataset for different evaluations
+    print("\n=== Step 3: Dataset Splitting ===")
     evaluations = ['CS', 'CV']
     for evaluation in evaluations:
+        print(f"  Splitting dataset for {evaluation} evaluation...")
         split_dataset(skes_joints, label, performer, camera, evaluation, save_path)
+        print(f"  Saved NTU60_{evaluation}.npz")
+    
+    print("\n=== Processing Complete ===")
